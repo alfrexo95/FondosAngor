@@ -111,7 +111,7 @@ async def main():
         return
     sk = nsec_to_hex(nsec)
     state = load_state()
-    
+
     # 1. Publicar el Zap Goal (NIP-75) una sola vez
     if not state.get("goal_id"):
         goal_tags = [
@@ -126,24 +126,24 @@ async def main():
             state["goal_id"] = goal_ev["id"]
             save_state(state)
             print("✅ Zap Goal publicado y guardado.")
-    
+
     # 2. Detectar todos los archivos en la carpeta media
     valid_ext = ('.jpg', '.jpeg', '.png', '.gif', '.mp4', '.webm')
     files = sorted([f for f in os.listdir(MEDIA_DIR) if f.lower().endswith(valid_ext)])
-    
+
     if not files:
         print("❌ No hay fotos ni videos en la carpeta media/")
         return
-        
+
     # 3. Seleccionar el archivo de esta semana (bucle infinito)
     idx = state.get("current_index", 0) % len(files)
     selected_file = files[idx]
     media_url = f"https://raw.githubusercontent.com/alfrexo95/FondosAngor/main/media/{selected_file}"
-    
+
     # 4. Armar las menciones
     mention_list = " ".join([f"{name} ({npub})" for name, npub in FEATURED])
-    
-    # 5. Armar el mensaje con las direcciones
+
+    # 5. Armar el mensaje con las direcciones (AQUÍ ESTÁ EL MENSAJE DE REPOSTEO)
     text = f"""🚨 Help Cuban Families Survive the Crisis 🇨🇺
 
 The blockade makes traditional international transfers almost impossible. We rely on decentralized money to deliver food, medicine, and shelter directly to those in need.
@@ -159,19 +159,21 @@ Every sat and every fraction of a coin helps. If you want to support, here are o
 📸 Evidence ({idx+1}/{len(files)}):
 {media_url}
 
+🔁 PLEASE REPOST THIS NOTE to help us reach more people, both inside and outside Nostr. Every share counts! 🌍
+
 Follow these Nostr leaders: {mention_list}
 
 #Cuba #Bitcoin #Crypto #Solidarity #Zaps"""
-    
+
     tags = [["t", "cuba"], ["t", "bitcoin"], ["t", "crypto"], ["t", "solidarity"]]
     if state.get("goal_id"):
         tags.append(["goal", state["goal_id"]])
-        
+
     ev = make_event(sk, text, kind=1, tags=tags)
-    
+
     print(f"📢 Publicando evidencia {idx+1}/{len(files)}: {selected_file}")
     results = await asyncio.gather(*[send(r, ev) for r in RELAYS])
-    
+
     if any(results):
         # 6. Guardar el estado para que la próxima semana publique la siguiente
         state["current_index"] = idx + 1
