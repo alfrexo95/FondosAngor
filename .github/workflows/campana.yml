@@ -2,7 +2,7 @@ name: Weekly Cuba Campaign
 
 on:
   schedule:
-    - cron: '0 15 * * 1' # Todos los Lunes a las 15:00 UTC
+    - cron: '0 22 * * 1' # Todos los Lunes a las 22:00 UTC (6:00 PM en Cuba)
   workflow_dispatch:     # Permite ejecución manual
 
 permissions:
