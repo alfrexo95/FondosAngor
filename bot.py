@@ -1,26 +1,17 @@
 import hashlib, json, time, os, sys, secrets, asyncio, re
 import websockets
 
-# ==================== CONFIGURACIÓN ====================
-# La meta de 1,000,000 sats (en milisats)
+DIR = os.path.dirname(os.path.abspath(__file__))
+MEDIA_DIR = os.path.join(DIR, "media")
+STATE_FILE = os.path.join(DIR, "state.json")
+
 GOAL_AMOUNT_MSATS = 1000000000 
-TITLE = "Direct Relief for Cuba: Food, Medicine & Dignity"
+GOAL_SUMMARY = "Direct Relief for Cuba: Food, Medicine & Dignity"
 DESCRIPTION = """The economic crisis in Cuba has pushed vulnerable families, especially children and the elderly, to the brink. Famine, a lack of basic medicines, and deteriorating housing are our daily reality.
 
-Why Bitcoin and Nostr? Traditional aid is often blocked or delayed. We use NIP-75 Zap Goals to create a direct, peer-to-peer channel. No banks, no middlemen, no censorship.
+Why Crypto and Nostr? Traditional aid is often blocked or delayed. We use NIP-75 Zap Goals and crypto to create a direct, peer-to-peer channel. No banks, no middlemen, no censorship.
 
-Every sat raised will be strictly allocated to:
-1. Food & Nutrition for families facing famine.
-2. Medicine & Health for local clinics.
-3. Dignified Housing materials.
-
-Because this is a Zap Goal, funds go directly to my Lightning wallet. Your support is a lifeline. Let's prove that decentralized solidarity works."""
-
-# Aquí pondrás las URLs de tus fotos/videos después de subirlos a GitHub
-MEDIA_URLS = [
-    # "https://raw.githubusercontent.com/alfrexo95/FondosAngor/main/media/foto1.jpg",
-    # "https://raw.githubusercontent.com/alfrexo95/FondosAngor/main/media/video1.mp4"
-]
+Every sat raised will be strictly allocated to Food, Medicine, and Dignified Housing. Your support is a lifeline."""
 
 RELAYS = [
     "wss://relay.primal.net",
@@ -28,7 +19,6 @@ RELAYS = [
     "wss://nos.lol",
     "wss://relay.snort.social",
 ]
-# =======================================================
 
 p = 2**256 - 2**32 - 977
 n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
@@ -95,40 +85,86 @@ async def send(url, ev):
         print(f"{url} error: {e}")
         return False
 
+def load_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE) as f:
+            return json.load(f)
+    return {"current_index": 0, "goal_id": None}
+
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
 async def main():
     nsec = os.environ.get("NOSTR_NSEC", "").strip()
     if not nsec:
-        print("❌ Falta el secreto NOSTR_NSEC en GitHub Actions")
+        print("❌ Falta el secreto NOSTR_NSEC")
         return
     sk = nsec_to_hex(nsec)
+    state = load_state()
     
-    # 1. Crear y publicar el Zap Goal (Kind 9041)
-    goal_tags = [
-        ["relays"] + RELAYS,
-        ["amount", str(GOAL_AMOUNT_MSATS)],
-        ["summary", TITLE]
-    ]
-    goal_ev = make_event(sk, DESCRIPTION, kind=9041, tags=goal_tags)
+    # 1. Publicar el Zap Goal (NIP-75) una sola vez
+    if not state.get("goal_id"):
+        goal_tags = [
+            ["relays"] + RELAYS,
+            ["amount", str(GOAL_AMOUNT_MSATS)],
+            ["summary", GOAL_SUMMARY]
+        ]
+        goal_ev = make_event(sk, DESCRIPTION, kind=9041, tags=goal_tags)
+        print("🎯 Publicando Zap Goal (Kind 9041)...")
+        results = await asyncio.gather(*[send(r, goal_ev) for r in RELAYS])
+        if any(results):
+            state["goal_id"] = goal_ev["id"]
+            save_state(state)
+            print("✅ Zap Goal publicado y guardado.")
     
-    print("🎯 Publicando el Zap Goal (Kind 9041)...")
-    await asyncio.gather(*[send(r, goal_ev) for r in RELAYS])
+    # 2. Detectar todos los archivos en la carpeta media
+    valid_ext = ('.jpg', '.jpeg', '.png', '.gif', '.mp4', '.webm')
+    files = sorted([f for f in os.listdir(MEDIA_DIR) if f.lower().endswith(valid_ext)])
     
-    # 2. Crear y publicar la nota promocional (Kind 1) con fotos/videos
-    promo_text = f"🚨 URGENT: {TITLE}\n\n{DESCRIPTION}\n\n"
-    
-    if MEDIA_URLS:
-        promo_text += "📸 Evidence & Media:\n" + "\n".join(MEDIA_URLS) + "\n\n"
+    if not files:
+        print("❌ No hay fotos ni videos en la carpeta media/")
+        return
         
-    promo_text += f"⚡ Goal: {GOAL_AMOUNT_MSATS // 1000:,} sats\nLightning: olivinepug15@primal.net\n\n#Cuba #Bitcoin #Nostr #Zaps #Solidarity"
+    # 3. Seleccionar el archivo de esta semana (bucle infinito)
+    idx = state.get("current_index", 0) % len(files)
+    selected_file = files[idx]
+    media_url = f"https://raw.githubusercontent.com/alfrexo95/FondosAngor/main/media/{selected_file}"
     
-    # Etiquetar el goal para que el cliente lo vincule
-    promo_tags = [["t", "cuba"], ["t", "bitcoin"], ["t", "nostr"], ["t", "zaps"]]
+    # 4. Armar el mensaje con las direcciones
+    text = f"""🚨 Help Cuban Families Survive the Crisis 🇨🇺
+
+The blockade makes traditional international transfers almost impossible. We rely on decentralized money to deliver food, medicine, and shelter directly to those in need.
+
+Every sat and every fraction of a coin helps. If you want to support, here are our official addresses:
+
+₿ BTC: bc1qt3rukpe7qp737zj5j5xpxxmcqv90cfefhg5e00
+Ξ ETH: 0xA5E6eB31868A85127B1ED82b8C760193356206ED
+Ł LTC: LcwAfm4xeJt5sHHVHAGN4qfiv7ruYKzqTe
+⚡ Lightning: olivinepug15@primal.net
+
+🎯 Zap Goal: 1,000,000 sats
+📸 Evidence ({idx+1}/{len(files)}):
+{media_url}
+
+#Cuba #Bitcoin #Crypto #Solidarity #Zaps"""
     
-    promo_ev = make_event(sk, promo_text, kind=1, tags=promo_tags)
-    print("📢 Publicando nota promocional (Kind 1) con multimedia...")
-    await asyncio.gather(*[send(r, promo_ev) for r in RELAYS])
+    tags = [["t", "cuba"], ["t", "bitcoin"], ["t", "crypto"], ["t", "solidarity"]]
+    if state.get("goal_id"):
+        tags.append(["goal", state["goal_id"]])
+        
+    ev = make_event(sk, text, kind=1, tags=tags)
     
-    print("✅ Proceso completado.")
+    print(f"📢 Publicando evidencia {idx+1}/{len(files)}: {selected_file}")
+    results = await asyncio.gather(*[send(r, ev) for r in RELAYS])
+    
+    if any(results):
+        # 5. Guardar el estado para que la próxima semana publique la siguiente
+        state["current_index"] = idx + 1
+        save_state(state)
+        print("✅ Publicado correctamente. Próxima semana toca otro archivo.")
+    else:
+        print("❌ No se pudo publicar en ningún relay.")
 
 if __name__ == "__main__":
     asyncio.run(main())
