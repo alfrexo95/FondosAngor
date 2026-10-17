@@ -14,10 +14,19 @@ Why Crypto and Nostr? Traditional aid is often blocked or delayed. We use NIP-75
 Every sat raised will be strictly allocated to Food, Medicine, and Dignified Housing. Your support is a lifeline."""
 
 RELAYS = [
-    "wss://relay.primal.net",
     "wss://relay.damus.io",
+    "wss://relay.primal.net",
     "wss://nos.lol",
-    "wss://relay.snort.social",
+    "wss://relay.nostr.band",
+    "wss://relay.snort.social"
+]
+
+FEATURED = [
+    ("fiatjaf", "nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6"),
+    ("Jack Dorsey", "nostr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjs"),
+    ("Snowden", "nostr:npub1sn0wdenkukak0d9dfczzeacvhkrgz92ak56egt7vdgzn8pv2wfqqhrjdv9"),
+    ("ODELL", "nostr:npub1qny3tkh0acurzla8x3zy4nhrjz5zd8l9sy9jys09umwng00manysew95gx"),
+    ("MartyBent", "nostr:npub1guh5grefa7vkay4ps6udxg8lrqxg2kgr3qh9n4gduxut64nfxq0q9y6hjy")
 ]
 
 p = 2**256 - 2**32 - 977
@@ -131,7 +140,10 @@ async def main():
     selected_file = files[idx]
     media_url = f"https://raw.githubusercontent.com/alfrexo95/FondosAngor/main/media/{selected_file}"
     
-    # 4. Armar el mensaje con las direcciones
+    # 4. Armar las menciones
+    mention_list = " ".join([f"{name} ({npub})" for name, npub in FEATURED])
+    
+    # 5. Armar el mensaje con las direcciones
     text = f"""🚨 Help Cuban Families Survive the Crisis 🇨🇺
 
 The blockade makes traditional international transfers almost impossible. We rely on decentralized money to deliver food, medicine, and shelter directly to those in need.
@@ -147,6 +159,8 @@ Every sat and every fraction of a coin helps. If you want to support, here are o
 📸 Evidence ({idx+1}/{len(files)}):
 {media_url}
 
+Follow these Nostr leaders: {mention_list}
+
 #Cuba #Bitcoin #Crypto #Solidarity #Zaps"""
     
     tags = [["t", "cuba"], ["t", "bitcoin"], ["t", "crypto"], ["t", "solidarity"]]
@@ -159,7 +173,7 @@ Every sat and every fraction of a coin helps. If you want to support, here are o
     results = await asyncio.gather(*[send(r, ev) for r in RELAYS])
     
     if any(results):
-        # 5. Guardar el estado para que la próxima semana publique la siguiente
+        # 6. Guardar el estado para que la próxima semana publique la siguiente
         state["current_index"] = idx + 1
         save_state(state)
         print("✅ Publicado correctamente. Próxima semana toca otro archivo.")
